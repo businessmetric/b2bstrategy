@@ -1,5 +1,7 @@
 // YCLID UTM Tracker для Google Tag Manager (универсальная версия)
 (function() {
+    'use strict';
+    
     // Функция для установки cookie
     function setCookie(name, value, days) {
         var expires = "";
@@ -9,6 +11,7 @@
             expires = "; expires=" + date.toUTCString();
         }
         document.cookie = name + "=" + encodeURIComponent(value) + expires + "; path=/";
+        console.log('🍪 ECLID Tracker: Cookie установлен:', name, '=', value);
     }
 
     // Функция для получения cookie
@@ -69,28 +72,43 @@
             return url + separator + paramsStr;
         }
     }
-
+    
     // Функция для обработки ссылок с добавлением параметров
     function processLinks(paramsToAdd) {
         var allLinks = getAllLinks();
         var thmPageRegex = /^https?:\/\/(www\.)?thm\.page/i;
+        var processedCount = 0;
+        
+        console.log('🔍 ECLID Tracker: Обработка ссылок, найдено:', allLinks.length);
         
         for (var i = 0; i < allLinks.length; i++) {
             try {
                 var link = allLinks[i];
                 if (link.href && thmPageRegex.test(link.href)) {
+                    console.log('🎯 ECLID Tracker: Найдена THM.page ссылка:', link.href);
+                    
                     // Проверяем, что ссылка еще не обработана
                     if (!link.getAttribute('data-utm-processed')) {
+                        var originalHref = link.href;
                         link.href = addParamsToUrl(link.href, paramsToAdd);
                         link.setAttribute('data-utm-processed', 'true');
+                        processedCount++;
+                        
+                        console.log('✅ ECLID Tracker: Ссылка обработана');
+                        console.log('   Было:', originalHref);
+                        console.log('   Стало:', link.href);
+                    } else {
+                        console.log('ℹ️ ECLID Tracker: Ссылка уже была обработана');
                     }
                 }
             } catch(e) {
-                // Игнорируем ошибки обработки отдельных ссылок
+                console.error('❌ ECLID Tracker: Ошибка обработки ссылки:', e);
             }
         }
+        
+        console.log('✅ ECLID Tracker: Обработано ' + processedCount + ' ссылок THM.page');
     }
-
+    
     // Функция для наблюдения за изменениями DOM
     function observeDOM(paramsToAdd) {
         // Обрабатываем существующие ссылки
@@ -104,9 +122,11 @@
                     if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
                         for (var i = 0; i < mutation.addedNodes.length; i++) {
                             var node = mutation.addedNodes[i];
-                            if (node.nodeType === Node.ELEMENT_NODE) {
+                            // Проверяем что это элемент (nodeType === 1)
+                            if (node.nodeType === 1) {
                                 if (node.tagName === 'A' || (node.querySelector && node.querySelector('a'))) {
                                     shouldProcess = true;
+                                    console.log('🔄 ECLID Tracker: Обнаружены новые ссылки в DOM');
                                     break;
                                 }
                             }
@@ -119,13 +139,23 @@
                 }
             });
             
-            observer.observe(document.body, {
-                childList: true,
-                subtree: true
-            });
+            // Ждем, пока body будет доступен
+            function startObserver() {
+                if (document.body) {
+                    observer.observe(document.body, {
+                        childList: true,
+                        subtree: true
+                    });
+                    console.log('👁️ ECLID Tracker: MutationObserver запущен');
+                } else {
+                    setTimeout(startObserver, 100);
+                }
+            }
+            startObserver();
         }
         // Fallback: периодическая проверка для старых браузеров
         else {
+            console.log('⚠️ ECLID Tracker: MutationObserver недоступен, используется fallback');
             setInterval(function() {
                 processLinks(paramsToAdd);
             }, 2000);
@@ -135,10 +165,13 @@
     // Основная функция инициализации
     function initTracker() {
         try {
+            console.log('🚀 ECLID Tracker: Инициализация...');
+            
             // Сохраняем yclid из URL в cookie
             var yclid = getUrlParam('yclid');
             if (yclid) {
                 setCookie('yclid', yclid, 365);
+                console.log('✅ ECLID Tracker: YCLID сохранен:', yclid);
             }
             
             // Сохраняем UTM параметры из URL в cookies
@@ -147,6 +180,7 @@
                 var value = getUrlParam(param);
                 if (value) {
                     setCookie(param, value, 365);
+                    console.log('✅ ECLID Tracker: UTM параметр сохранен:', param, '=', value);
                 }
             });
             
@@ -155,25 +189,43 @@
             var savedYclid = getCookie('yclid');
             if (savedYclid) {
                 paramsToAdd.yclid = savedYclid;
+                console.log('📖 ECLID Tracker: YCLID из cookies:', savedYclid);
             }
             
             utmParams.forEach(function(param) {
                 var value = getCookie(param);
                 if (value) {
                     paramsToAdd[param] = value;
+                    console.log('📖 ECLID Tracker: UTM из cookies:', param, '=', value);
                 }
             });
             
+            console.log('🔧 ECLID Tracker: Параметры для добавления:', paramsToAdd);
+            
             // Если нет параметров для добавления - выходим
-            if (Object.keys(paramsToAdd).length === 0) return;
+            if (Object.keys(paramsToAdd).length === 0) {
+                console.log('⚠️ ECLID Tracker: Нет параметров для добавления');
+                return;
+            }
             
             // Запускаем наблюдение за ссылками
             observeDOM(paramsToAdd);
+            console.log('✅ ECLID Tracker: Наблюдение за ссылками запущено');
             
         } catch (error) {
-            // Игнорируем общие ошибки
+            console.error('❌ ECLID Tracker: Ошибка инициализации:', error);
         }
     }
+    
+    // Делаем функцию доступной глобально для тестирования
+    window.initTracker = initTracker;
+    window.eclid = {
+        setCookie: setCookie,
+        getCookie: getCookie,
+        getUrlParam: getUrlParam,
+        processLinks: processLinks,
+        addParamsToUrl: addParamsToUrl
+    };
 
     // Запуск при загрузке страницы
     if (document.readyState === 'loading') {
