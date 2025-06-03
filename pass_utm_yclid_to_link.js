@@ -50,7 +50,7 @@
             
             // Добавляем параметры, если их еще нет в URL
             Object.keys(params).forEach(function(key) {
-                if (!searchParams.has(key) {
+                if (!searchParams.has(key)) {
                     searchParams.set(key, params[key]);
                 }
             });
@@ -67,6 +67,68 @@
             }).join('&');
             
             return url + separator + paramsStr;
+        }
+    }
+
+    // Функция для обработки ссылок с добавлением параметров
+    function processLinks(paramsToAdd) {
+        var allLinks = getAllLinks();
+        var thmPageRegex = /^https?:\/\/(www\.)?thm\.page/i;
+        
+        for (var i = 0; i < allLinks.length; i++) {
+            try {
+                var link = allLinks[i];
+                if (link.href && thmPageRegex.test(link.href)) {
+                    // Проверяем, что ссылка еще не обработана
+                    if (!link.getAttribute('data-utm-processed')) {
+                        link.href = addParamsToUrl(link.href, paramsToAdd);
+                        link.setAttribute('data-utm-processed', 'true');
+                    }
+                }
+            } catch(e) {
+                // Игнорируем ошибки обработки отдельных ссылок
+            }
+        }
+    }
+
+    // Функция для наблюдения за изменениями DOM
+    function observeDOM(paramsToAdd) {
+        // Обрабатываем существующие ссылки
+        processLinks(paramsToAdd);
+        
+        // Настраиваем MutationObserver для новых ссылок
+        if (window.MutationObserver) {
+            var observer = new MutationObserver(function(mutations) {
+                var shouldProcess = false;
+                mutations.forEach(function(mutation) {
+                    if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+                        for (var i = 0; i < mutation.addedNodes.length; i++) {
+                            var node = mutation.addedNodes[i];
+                            if (node.nodeType === Node.ELEMENT_NODE) {
+                                if (node.tagName === 'A' || (node.querySelector && node.querySelector('a'))) {
+                                    shouldProcess = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                });
+                
+                if (shouldProcess) {
+                    processLinks(paramsToAdd);
+                }
+            });
+            
+            observer.observe(document.body, {
+                childList: true,
+                subtree: true
+            });
+        }
+        // Fallback: периодическая проверка для старых браузеров
+        else {
+            setInterval(function() {
+                processLinks(paramsToAdd);
+            }, 2000);
         }
     }
 
@@ -92,10 +154,10 @@
             var paramsToAdd = {};
             var savedYclid = getCookie('yclid');
             if (savedYclid) {
-                paramsToAdd.utm_term = savedYclid;
+                paramsToAdd.yclid = savedYclid;
             }
             
-            utmParams.slice(0, 4).forEach(function(param) { // исключаем utm_term (уже обработан)
+            utmParams.forEach(function(param) {
                 var value = getCookie(param);
                 if (value) {
                     paramsToAdd[param] = value;
@@ -105,20 +167,9 @@
             // Если нет параметров для добавления - выходим
             if (Object.keys(paramsToAdd).length === 0) return;
             
-            // Обрабатываем ссылки на странице
-            var allLinks = getAllLinks();
-            var thmPageRegex = /^https?:\/\/(www\.)?thm\.page/i;
+            // Запускаем наблюдение за ссылками
+            observeDOM(paramsToAdd);
             
-            for (var i = 0; i < allLinks.length; i++) {
-                try {
-                    var link = allLinks[i];
-                    if (link.href && thmPageRegex.test(link.href)) {
-                        link.href = addParamsToUrl(link.href, paramsToAdd);
-                    }
-                } catch(e) {
-                    // Игнорируем ошибки обработки отдельных ссылок
-                }
-            }
         } catch (error) {
             // Игнорируем общие ошибки
         }
@@ -126,10 +177,13 @@
 
     // Запуск при загрузке страницы
     if (document.readyState === 'loading') {
-        document.addEventListener ? document.addEventListener('DOMContentLoaded', initTracker) :
-        document.attachEvent('onreadystatechange', function() {
-            if (document.readyState === 'complete') initTracker();
-        });
+        if (document.addEventListener) {
+            document.addEventListener('DOMContentLoaded', initTracker);
+        } else if (document.attachEvent) {
+            document.attachEvent('onreadystatechange', function() {
+                if (document.readyState === 'complete') initTracker();
+            });
+        }
     } else {
         initTracker();
     }
