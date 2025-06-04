@@ -1,4 +1,5 @@
-// YCLID UTM Tracker для Google Tag Manager (универсальная версия)
+// YCLID UTM Tracker - исправленная версия
+// Передает YCLID как utm_term в ссылки на thm.page
 (function() {
     'use strict';
     
@@ -184,21 +185,24 @@
                 }
             });
             
-            // Получаем сохраненные параметры
+            // КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: Получаем сохраненные параметры
             var paramsToAdd = {};
             var savedYclid = getCookie('yclid');
-            if (savedYclid) {
-                paramsToAdd.yclid = savedYclid;
-                console.log('📖 ECLID Tracker: YCLID из cookies:', savedYclid);
-            }
             
+            // Добавляем UTM параметры, кроме utm_term
             utmParams.forEach(function(param) {
                 var value = getCookie(param);
-                if (value) {
+                if (value && param !== 'utm_term') {
                     paramsToAdd[param] = value;
                     console.log('📖 ECLID Tracker: UTM из cookies:', param, '=', value);
                 }
             });
+            
+            // Если есть yclid, добавляем его как utm_term (ГЛАВНОЕ ИЗМЕНЕНИЕ)
+            if (savedYclid) {
+                paramsToAdd.utm_term = savedYclid;
+                console.log('📖 ECLID Tracker: YCLID передается как utm_term:', savedYclid);
+            }
             
             console.log('🔧 ECLID Tracker: Параметры для добавления:', paramsToAdd);
             
